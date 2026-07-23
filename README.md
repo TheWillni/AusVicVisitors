@@ -1,5 +1,7 @@
 # AusVicVisitors
 
+<img width="1486" height="1012" alt="firefox_Lm7IHdQgjw" src="https://github.com/user-attachments/assets/4e965ce9-fcde-4256-9920-1e0d0697b3ff" />
+
 Illustration assets for [AvianVisitors](https://github.com/Twarner491/AvianVisitors), scoped to species observed in Victoria, Australia (eBird region `AU-VIC`).
 
 - 398 species (796 illustrations: perched + flight pose for each), all generated and background-cut.
@@ -8,3 +10,4 @@ Illustration assets for [AvianVisitors](https://github.com/Twarner491/AvianVisit
 - `frontend/dims.json` and `frontend/masks.json` are included for direct use in an AvianVisitors collage frontend.
 
 These images aren't perfect - I've prioritized fixing the more common species first, so rarer ones are more likely to still have issues. If you spot a problem, please submit a PR with a fix.
+
