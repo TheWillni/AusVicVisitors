@@ -16,6 +16,17 @@
 #     # add a line like:
 #     */30 * * * * /home/willni/AusVicVisitors/scripts/sync-to-birdnet-pi.sh
 #
+# Flags:
+#   --dry-run   show what would change (rsync -v, no writes) without
+#               touching any deployed file. Still does a real `git
+#               pull` on the repo clone itself, same as a normal run.
+#   --force     re-sync even if this commit was already deployed (the
+#               normal run skips deploying when nothing changed since
+#               the last successful sync, tracked in
+#               ~/.ausvicvisitors-last-synced-sha). Useful to re-push
+#               the current commit after a manual fix, or to recover
+#               if a previous run partially failed after the pull step.
+#
 # Log output goes to ~/ausvicvisitors-sync.log (rotate/trim manually if
 # it grows large - this script does not do that itself).
 set -euo pipefail
@@ -26,11 +37,14 @@ ILLUSTRATIONS_DEST="$BIRDNET_DIR/avian/assets/illustrations"
 FRONTEND_DEST="$BIRDNET_DIR/avian/frontend"
 LOCKFILE="/tmp/ausvicvisitors-sync.lock"
 LOGFILE="$HOME/ausvicvisitors-sync.log"
+LAST_SYNCED_FILE="$HOME/.ausvicvisitors-last-synced-sha"
 DRY_RUN=0
+FORCE=0
 
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
+    --force) FORCE=1 ;;
   esac
 done
 
@@ -56,19 +70,28 @@ fi
 log "sync starting (dry-run=$DRY_RUN)"
 
 cd "$REPO_DIR"
-BEFORE_SHA=$(git rev-parse HEAD)
 if ! git pull --ff-only origin main >>"$LOGFILE" 2>&1; then
   log "git pull failed - leaving deployed assets untouched, will retry next run"
   exit 1
 fi
 AFTER_SHA=$(git rev-parse HEAD)
 
-if [ "$BEFORE_SHA" = "$AFTER_SHA" ] && [ "$DRY_RUN" -eq 0 ]; then
-  log "no new commits ($AFTER_SHA), nothing to sync"
+# Compare against the last commit we ACTUALLY deployed (tracked in
+# LAST_SYNCED_FILE), not just whether this git pull found something
+# new. A --dry-run call still does a real `git pull` above (only the
+# file-copying steps below are skipped) - if the skip check compared
+# raw git SHAs instead, a dry-run could silently consume the "there's
+# new stuff" signal, and a real run right after would find nothing
+# left to pull and wrongly skip deploying anything at all.
+LAST_SYNCED_SHA=""
+[ -f "$LAST_SYNCED_FILE" ] && LAST_SYNCED_SHA=$(cat "$LAST_SYNCED_FILE")
+
+if [ "$AFTER_SHA" = "$LAST_SYNCED_SHA" ] && [ "$DRY_RUN" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
+  log "already deployed at $AFTER_SHA, nothing to sync (use --force to re-sync anyway)"
   exit 0
 fi
 
-log "syncing $BEFORE_SHA -> $AFTER_SHA"
+log "syncing to $AFTER_SHA (last deployed: ${LAST_SYNCED_SHA:-none})"
 
 RSYNC_FLAGS=(-a --delete)
 [ "$DRY_RUN" -eq 1 ] && RSYNC_FLAGS+=(--dry-run -v)
@@ -114,6 +137,10 @@ if [ -f "$APT_JS" ]; then
   fi
 else
   log "warning: $APT_JS not found, skipped cache-bust version patch"
+fi
+
+if [ "$DRY_RUN" -eq 0 ]; then
+  echo "$AFTER_SHA" > "$LAST_SYNCED_FILE"
 fi
 
 log "sync complete, version tag $VERSION_TAG"
